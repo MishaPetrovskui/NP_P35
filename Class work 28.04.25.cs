@@ -1,16 +1,26 @@
+
 using System.Text;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.Http;
+using System.Text.Json;
 
-
+class Message
+{
+    public string user { get; set; }
+    public string text { get; set; }
+    public ConsoleColor color { get; set; }
+}
 class Server
 {
+    static List<ConsoleColor> colors = new List<ConsoleColor> { ConsoleColor.Red, ConsoleColor.Yellow, ConsoleColor.Cyan, ConsoleColor.Magenta, ConsoleColor.Blue, ConsoleColor.DarkGreen, ConsoleColor.DarkBlue, ConsoleColor.DarkCyan, ConsoleColor.DarkGray, ConsoleColor.DarkMagenta, ConsoleColor.DarkRed, ConsoleColor.DarkYellow, ConsoleColor.Gray, ConsoleColor.Green, ConsoleColor.White };
+    static Random rnd = new Random();
+
     static TcpListener listener;
     static int port = 5000;
     static int clients = 1;
     static readonly object lockObj = new object();
-    static void sendMessage(NetworkStream stream, string message)
+    static void sendMessage(NetworkStream stream, string message, int buffsize = 1024)
     {
         if (stream == null)
             return;
@@ -22,8 +32,10 @@ class Server
         if (stream == null)
             return "";
         byte[] buffer = new byte[buffsize];
-        stream.Read(buffer, 0, buffer.Length);
-        return Encoding.UTF8.GetString(buffer);
+        stream.Read(buffer, 0, buffsize);
+        string ret = Encoding.UTF8.GetString(buffer).Split(char.MinValue).First();
+
+        return ret;
     }
 
     static void Main(string[] args)
@@ -45,13 +57,40 @@ class Server
         }
     }
 
-    static List<NetworkStream> streams = new List<NetworkStream>();
-
+    static List<TcpClient> Clients = new List<TcpClient>();
+    static void Broadcast(Message message)
+    {
+        Console.WriteLine($"{message.user}: {message.text}");
+        foreach (var item in Clients.ToArray())
+        {
+            try
+            {
+                sendMessage(item.GetStream(), JsonSerializer.Serialize
+                    (
+                    new Message { user = message.user, text = message.text, color = message.color }
+                    ));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+    }
     static void Broadcast(string message)
     {
-        foreach (var item in streams)
+        Console.WriteLine($"Broadcast: {message}");
+        foreach (var item in Clients.ToArray())
         {
-            sendMessage(item, message);
+            sendMessage(item.GetStream(), message);
+        }
+    }
+    static void BroadcastExceptSOMEONE(string message, TcpClient client)
+    {
+        Console.WriteLine($"Broadcast: {message}");
+        foreach (var item in Clients.ToArray())
+        {
+            if (item != client)
+                sendMessage(item.GetStream(), message);
         }
     }
 
@@ -62,9 +101,8 @@ class Server
         Console.WriteLine("New Client");
 
         var endPoint = client.Client.RemoteEndPoint.ToString();
-
+        Clients.Add(client);
         var stream = client.GetStream();
-        streams.Add(stream);
         string name = GetMessage(stream);
         Console.WriteLine($"Name {name} | {endPoint.ToString()}");
 
@@ -73,22 +111,33 @@ class Server
         {
             sendMessage(stream, Convert.ToString(clients++));
         }
-
-        /*Broadcast(name);*/
-
+        Broadcast(new Message { user = "Server", text = $"{name} ({endPoint}) added",  });
         try
         {
-            while (true) { GetMessage(stream); }
+            while (true)
+            {
+                Message? clientMessage =
+                    JsonSerializer.Deserialize<Message>(GetMessage(stream));
+                if (clientMessage != null)
+                {
+                    Broadcast(new Message { user = clientMessage.user, text = clientMessage.text, color = clientMessage.color });
+                    //Broadcast($"{clientMessage.color}{clientMessage.user}: {clientMessage.text}");
+                }
+            }
+
         }
         catch (Exception ex)
         {
-            Broadcast($"{name} off");
-        }/*
+            BroadcastExceptSOMEONE($"{name} ({endPoint}) Disconected!", client);
+        }
         finally
         {
-            lock (clients) { clients.Remove(client); }
-            client.Close(); 
-        }*/
+            lock (client)
+                Clients.Remove(client);
+
+            client.Close();
+        }
+
 
     }
 
@@ -96,18 +145,33 @@ class Server
 
 
 
+
+
+// client
+
+
+
+
 using System.Text;
 using System.Net;
 using System.Net.Sockets;
 using System.IO;
-
+using System.Text.Json;
+using System.Drawing;
+class Message
+{
+    public string user { get; set; }
+    public string text { get; set; }
+    public ConsoleColor color { get; set; }
+}
 class Client
 {
     static string serverIP = "127.0.0.1";
     static int port = 5000;
     static NetworkStream? stream = null;
+    static Random rand = new Random();
 
-    static void sendMessage(string message)
+    static void sendMessage(string message, int buffsize = 1024)
     {
         if (stream == null)
             return;
@@ -119,8 +183,25 @@ class Client
         if (stream == null)
             return "";
         byte[] buffer = new byte[buffsize];
-        stream.Read(buffer, 0, buffer.Length);
-        return Encoding.UTF8.GetString(buffer);
+        stream.Read(buffer, 0, buffsize);
+        string ret = Encoding.UTF8.GetString(buffer).Split(char.MinValue).First();
+
+        return ret;
+
+    }
+
+    static void ReadingFromServer()
+    {
+        while (true)
+        {
+            try
+            {
+                Message? clientMessage =
+                    JsonSerializer.Deserialize<Message>(GetMessage());
+                Console.ForegroundColor = clientMessage.color;
+            }
+            catch (Exception ex) { break; }
+        }
     }
 
     static void Main(string[] args)
@@ -129,7 +210,7 @@ class Client
         Console.InputEncoding = UTF8Encoding.UTF8;
 
         Console.Write("Type your name: ");
-        string a = Console.ReadLine();
+        string name = Console.ReadLine();
 
 
         TcpClient tcpClient = new TcpClient(serverIP, port);
@@ -137,14 +218,25 @@ class Client
 
         stream = tcpClient.GetStream();
 
-        sendMessage(a);
+        sendMessage(name);
         string number = GetMessage();
 
         Console.WriteLine($"You are {Convert.ToInt32(number)} client");
 
+        Thread serverOutputThread = new Thread(ReadingFromServer);
+        serverOutputThread.Start();
+
+        Message a = new Message();
+
         while (true)
         {
-            Console.WriteLine(GetMessage());
+            string text = Console.ReadLine();
+            sendMessage(
+                JsonSerializer.Serialize(
+                    new Message { user = name, text = text }));
         }
+
+        Console.WriteLine("Type Enter to exit");
+        Console.ReadLine();
     }
 }
