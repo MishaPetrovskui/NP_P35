@@ -68,7 +68,7 @@ class Server
             {
                 sendMessage(item.GetStream(), JsonSerializer.Serialize
                     (
-                    new Message { user = message.user, text = message.text, color = message.color }
+                    new Message { user = message.user, text = message.text }
                     ));
             }
             catch (Exception ex)
@@ -76,6 +76,7 @@ class Server
                 Console.WriteLine(ex.Message);
             }
         }
+        Console.ResetColor();
     }
     static void Broadcast(string message)
     {
@@ -112,7 +113,7 @@ class Server
         {
             sendMessage(stream, Convert.ToString(clients++));
         }
-        Broadcast(new Message { user = "Server", text = $"{name} ({endPoint}) added", });
+        Broadcast(new Message { user = "Server", text = $"{name} ({endPoint}) added",  });
         try
         {
             while (true)
@@ -122,7 +123,7 @@ class Server
                 if (clientMessage != null)
                 {
                     Broadcast(new Message { user = clientMessage.user, text = clientMessage.text, color = clientMessage.color });
-                    // Broadcast($"{clientMessage.color}{clientMessage.user}: {clientMessage.text}");
+                    Broadcast($"{clientMessage.user}: {clientMessage.text}");
                 }
             }
 
@@ -146,7 +147,7 @@ class Server
 
 
 
-// client
+// client 
 
 
 
@@ -168,6 +169,7 @@ class Client
     static int port = 5000;
     static NetworkStream? stream = null;
     static Random rand = new Random();
+    static ConsoleColor color;
 
     static void sendMessage(string message, int buffsize = 1024)
     {
@@ -197,6 +199,7 @@ class Client
                 Message? clientMessage =
                     JsonSerializer.Deserialize<Message>(GetMessage());
                 Console.ForegroundColor = clientMessage.color;
+                Console.WriteLine($"{clientMessage.user}: {clientMessage.text}");
                 Console.ResetColor();
             }
             catch (Exception ex) { break; }
@@ -222,10 +225,12 @@ class Client
 
         Console.WriteLine($"You are {Convert.ToInt32(number)} client");
 
+        Message a = new Message();
+
         Thread serverOutputThread = new Thread(ReadingFromServer);
         serverOutputThread.Start();
 
-        Message a = new Message();
+        
 
         while (true)
         {
