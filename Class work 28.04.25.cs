@@ -61,6 +61,7 @@ class Server
     static void Broadcast(Message message)
     {
         Console.WriteLine($"{message.user}: {message.text}");
+        Console.ForegroundColor = message.color;
         foreach (var item in Clients.ToArray())
         {
             try
@@ -111,7 +112,7 @@ class Server
         {
             sendMessage(stream, Convert.ToString(clients++));
         }
-        Broadcast(new Message { user = "Server", text = $"{name} ({endPoint}) added",  });
+        Broadcast(new Message { user = "Server", text = $"{name} ({endPoint}) added", });
         try
         {
             while (true)
@@ -121,7 +122,7 @@ class Server
                 if (clientMessage != null)
                 {
                     Broadcast(new Message { user = clientMessage.user, text = clientMessage.text, color = clientMessage.color });
-                    //Broadcast($"{clientMessage.color}{clientMessage.user}: {clientMessage.text}");
+                    // Broadcast($"{clientMessage.color}{clientMessage.user}: {clientMessage.text}");
                 }
             }
 
@@ -145,10 +146,7 @@ class Server
 
 
 
-
-
 // client
-
 
 
 
@@ -199,6 +197,7 @@ class Client
                 Message? clientMessage =
                     JsonSerializer.Deserialize<Message>(GetMessage());
                 Console.ForegroundColor = clientMessage.color;
+                Console.ResetColor();
             }
             catch (Exception ex) { break; }
         }
