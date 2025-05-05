@@ -1,10 +1,10 @@
-
 using System.Text;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.Http;
 using System.Text.Json;
 using System.IO;
+using static System.Net.Mime.MediaTypeNames;
 
 class Message
 {
@@ -34,10 +34,20 @@ class Server
         return false;
     }
 
+    static string Name(IPEndPoint endpoint)
+    {
+        foreach (var item in ipEndPoints)
+        {
+            if (item.ip.Equals(endpoint))
+                return item.name;
+        }
+        return "";
+    }
+
     static void Broadcast(string message, UdpClient server, string name)
     {
         Console.WriteLine($"{name}: {message}");
-        byte[] data = Encoding.UTF8.GetBytes(name + " - " + message);
+        byte[] data = Encoding.UTF8.GetBytes($"{name} - {message}");
         foreach (var item in ipEndPoints)
         {
             server.Send(data, item.ip);
@@ -66,42 +76,29 @@ class Server
                         Console.WriteLine("Send message: Not ping");
                     }
                 }*/
+        int i = 0;
         while (true)
         {
 
             IPEndPoint remoteEP = new IPEndPoint(IPAddress.Any, 0);
             byte[] data = server.Receive(ref remoteEP);
-            string name = Encoding.UTF8.GetString(data);
-            User user = new User { name = name, ip = remoteEP };
-            if (IsNew(user.ip))
+            string text = Encoding.UTF8.GetString(data);
+            User user = new User { name = text, ip = remoteEP };
+            if (IsNew(remoteEP))
             {
                 ipEndPoints.Add(user);
+                i++;
+                Console.WriteLine($"{user.name}: Added");
             }
-            Console.WriteLine($"{user.name}: Added");
-            try
-            {
-                while (true)
-                {
-                    byte[] data1 = server.Receive(ref remoteEP);
-                    string text = Encoding.UTF8.GetString(data);
-                    if (text != null)
-                    {
-                        Broadcast(text, server, name);
-                    }
-                }
-
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
+            else
+                Broadcast(text, server, Name(remoteEP));
         }
     }
 }
 
 
 
-// CLIENT 
+// client
 
 
 
@@ -149,7 +146,7 @@ class Client
         client = new UdpClient();
 
         serverEP = new IPEndPoint(IPAddress.Parse(serverIP), port);
-        
+
         Console.Write("Name: ");
         string message = Console.ReadLine();
         byte[] data = Encoding.UTF8.GetBytes(message);
@@ -180,13 +177,13 @@ class Client
                 }
                 else
                     Console.WriteLine($"Catched message: {answer}");*/
-        Thread thread = new Thread (ReadingFromServer);
+        Thread thread = new Thread(ReadingFromServer);
         thread.Start();
         while (true)
         {
             Console.Write("");
             string text = Console.ReadLine();
-            if (text != null )
+            if (text != null)
             {
                 byte[] data1 = Encoding.UTF8.GetBytes(text);
                 client.Send(data1, serverEP);
