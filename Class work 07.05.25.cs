@@ -13,12 +13,14 @@ class Player
 {
     public int X { get; set; }
     public int Y { get; set; }
-    public Player(int x, int y)
+    public ConsoleColor Color { get; set; }
+    public Player(int x, int y, ConsoleColor color)
     {
         X = x;
         Y = y;
+        Color = color;
     }
-    public Player() : this(0, 0) { }
+    public Player() : this(0, 0, ConsoleColor.White) { }
 }
 
 class UDPServerApp
@@ -27,6 +29,10 @@ class UDPServerApp
     static int port = 5056;
     static Dictionary<IPEndPoint, Player> players = new Dictionary<IPEndPoint, Player>();
     static Dictionary<IPEndPoint, DateTime> lastSeen = new Dictionary<IPEndPoint, DateTime>();
+    static List<ConsoleColor> colors = new List<ConsoleColor>
+    {
+        ConsoleColor.Red, ConsoleColor.DarkGreen, ConsoleColor.Magenta, ConsoleColor.Blue, ConsoleColor.Cyan, ConsoleColor.Magenta, ConsoleColor.Yellow
+    };
     static Player[] GetResponseForClient(IPEndPoint client)
     {
         List<Player> response = new List<Player>();
@@ -38,6 +44,11 @@ class UDPServerApp
             }
         }
         return response.ToArray();
+    }
+
+    static ConsoleColor GetAvailableColor()
+    {
+        return colors[rnd.Next(colors.Count)];
     }
 
     static void RemoveInactiveClients()
@@ -74,8 +85,8 @@ class UDPServerApp
             string text = Encoding.UTF8.GetString(data);
             Player player = JsonSerializer.Deserialize<Player>(text);
             if (player == null) { continue; }
-            if (players.ContainsKey(remoteEP)) { players[remoteEP] = player; lastSeen[remoteEP] = DateTime.Now; }
-            else { players.Add(remoteEP, player); }
+            if (players.ContainsKey(remoteEP)) { player.Color = players[remoteEP].Color; players[remoteEP] = player; lastSeen[remoteEP] = DateTime.Now; }
+            else { player.Color = GetAvailableColor(); players.Add(remoteEP, player); players[remoteEP] = player; lastSeen[remoteEP] = DateTime.Now; Console.WriteLine($"New gamer {remoteEP}, color: {player.Color}"); }
             Player[] response = GetResponseForClient(remoteEP);
             server.Send(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(response)), remoteEP);
         }
@@ -100,6 +111,7 @@ class Player
 {
     public int X { get; set; }
     public int Y { get; set; }
+    public ConsoleColor Color { get; set; }
     public Player(int x, int y)
     {
         X = x;
@@ -131,12 +143,12 @@ class Location
         {
             Console.SetCursorPosition(X, Y + y);
             Console.BackgroundColor = odno_slovo;
-            Console.ForegroundColor = dwa_slova;
+            /*Console.ForegroundColor = dwa_slova;*/
             for (int x = 0; x < width; x++)
             {
                 Player? player = GetPlayerByPosition(x, y);
                 if (player == null) { Console.Write("  "); }
-                else { Console.Write("[]"); }
+                else { Console.ForegroundColor = player.Color; Console.Write("[]"); }
             }
             Console.ResetColor();
         }
@@ -219,5 +231,7 @@ class UDPClientApp
             }
             location.Draw();
         }
+    }
+}
     }
 }
