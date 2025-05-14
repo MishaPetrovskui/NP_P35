@@ -48,7 +48,16 @@ class Client
                 Console.WriteLine(a);
                 Message? clientMessage =
                     JsonSerializer.Deserialize<Message>(a);
-                Console.WriteLine($"{clientMessage.user}: {clientMessage.text}");
+                if (clientMessage != null)
+                {
+                    if (clientMessage.user == "SERVER")
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                    else
+                        Console.ForegroundColor = ConsoleColor.White;
+
+                    Console.WriteLine($"{clientMessage.user}: {clientMessage.text}");
+                    Console.ResetColor();
+                }
             }
             catch (Exception ex) { Console.WriteLine(ex.Message); break; }
         }
