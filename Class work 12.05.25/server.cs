@@ -8,14 +8,6 @@ using System.Diagnostics;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 using static System.Net.Mime.MediaTypeNames;
 
-
-using System.Text;
-using System.Net;
-using System.Net.Sockets;
-using System.Net.Http;
-using System.Text.Json;
-using System.Drawing;
-
 class Message
 {
     public string user { get; set; }
@@ -93,11 +85,8 @@ class Server
 
     static string GetName(TcpClient client)
     {
-        foreach (var item in Name)
-        {
-            if (item.Key == client)
-                return item.Key.
-        }
+        if (Name.ContainsKey(client))
+            return Name[client];
         return "";
     }
 
@@ -130,7 +119,8 @@ class Server
         string name = GetMessage(stream);
         Console.WriteLine($"Name {name} | {endPoint.ToString()}");
         Name.Add(client, name);
-        Broadcast(new Message { user = "SERVER", text = $"{name} ({endPoint}) Connect to Server"});
+        Broadcast(new Message { user = "SERVER", text = $"{name} ({endPoint}) Connect to Server" });
+        
         try
         {
             while (true)
@@ -142,7 +132,7 @@ class Server
                     if (ClientsInGame.Contains(client))
                     {
                         if (client != curentPlayer)
-                            sendMessage(stream, JsonSerializer.Serialize(new Message { user = "SERVER", text = $"not your turn" } ));
+                            sendMessage(stream, JsonSerializer.Serialize(new Message { user = "SERVER", text = $"not your turn" }));
                         else
                         {
                             int? number;
@@ -155,6 +145,7 @@ class Server
                                     Broadcast(new Message { user = "SERVER", text = $"{name} quest the number!" });
                                     isGameStarted = false;
                                     isReady = 0;
+                                    ClientsInGame.Clear();
                                 }
                                 else if (number < questNumber)
                                 {
@@ -164,9 +155,9 @@ class Server
                                 {
                                     Broadcast(new Message { user = "SERVER", text = $"Corect number is smallest!" });
                                 }
-                                curentPlayer = ClientsInGame[ClientsInGame.IndexOf(curentPlayer) == ClientsInGame.Count - 1 ? 0 : ClientsInGame.IndexOf(curentPlayer) + 1];
                                 Thread.Sleep(100);
-                                Broadcast(new Message { user = "SERVER", text = $"{name}'s turn" });
+                                curentPlayer = ClientsInGame[ClientsInGame.IndexOf(curentPlayer) == ClientsInGame.Count - 1 ? 0 : ClientsInGame.IndexOf(curentPlayer) + 1];
+                                Broadcast(new Message { user = "SERVER", text = $"{GetName(curentPlayer)}'s turn" });
                             }
                             catch (Exception e)
                             {
@@ -176,7 +167,7 @@ class Server
                     }
                     else
                     {
-                        sendMessage(stream, $"Not your turn");
+                        sendMessage(stream, JsonSerializer.Serialize(new Message { user = "SERVER", text = $"Game started. Now playing {ClientsInGame.Count} players. Please wait" }));
                     }
                 }
                 else if (clientMessage.text.ToLower() == "ready")
@@ -192,10 +183,11 @@ class Server
                             ClientsInGame.Add(item);
                         }
                         curentPlayer = ClientsInGame[0];
+                        Broadcast(new Message { user = "SERVER", text = $"{GetName(curentPlayer)}'s turn" });
                     }
                 }
                 else if (clientMessage != null)
-                    Broadcast(new Message { user = clientMessage.user, text = clientMessage.text});
+                    Broadcast(new Message { user = clientMessage.user, text = clientMessage.text });
             }
 
         }
