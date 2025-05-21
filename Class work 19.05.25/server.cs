@@ -10,106 +10,37 @@ using static System.Net.Mime.MediaTypeNames;
 using System.Xml.Linq;
 using System;
 
-enum MessageType
+public enum MessageType
 {
-    SELECT,
-    NAME,
-    QUESTION,
-    QUESTIONanswer,
-    CHOSEN,
-    FINISH
+    Connect,
+    Question,
+    Answer,
+    Result,
+    Info,
+    End
 }
 
-enum questionType
+public class Question
 {
-    ANSWER,
-    OPEN
+    public string Text { get; set; } = "";
+    public List<string> Choices { get; set; } = new();
+    public int CorrectIndex { get; set; }
 }
 
-class test
+public class Message
 {
-    public string name { get; set; }
-    public List<questions> questions { get; set; }
-    public test(string name, List<questions> questions)
-    {
-        this.name = name;
-        this.questions = questions;
-    }
-    public List<questions> getAnsweredQuestions()
-    {
-        List<questions> answer = new List<questions>();
-        foreach(var a in this.questions)
-        {
-            if(!a.isAnswered)
-                answer.Add(a);
-        }
-        return answer;
-    }
-    public int getCorrect()
-    {
-        int answer = 0;
-        foreach (var a in this.questions)
-        {
-            if (!a.isAnswered)
-                answer++;
-        }
-        return answer;
-    }
+    public MessageType Type { get; set; }
+    public string? Text { get; set; }
+    public object? Data { get; set; }
 }
 
-class questions
+class SessionData
 {
-    public string text { get; set; }
-    public List<string> answers { get; set; }
-    public questionType type { set; get; }
-    public string corect { get; set; }
-    public bool isCorect { get; set; }
-    public bool isAnswered { get; set; }
-    public questions(string text, List<string> answers, string corect, questionType questionType) 
-    {
-        this.text = text;
-        this.answers = answers;
-        this.corect = corect;
-        this.type = questionType;
-    }
-    public bool IsThisCorectAnswer(string answer)
-    {
-        isAnswered = true;
-        if (answer.ToLower().Equals(corect.ToLower()))
-            return true;
-        return false;
-    }
+    public int CurrentQuestionIndex = 0;
+    public int Score = 0;
+    public List<Question> Questions = new();
 }
 
-class questionsWithoutAnswer
-{
-    public string text { get; set; }
-    public List<string> answers { get; set; }
-    public questionType type { set; get; }
-    public questionsWithoutAnswer(string text, List<string> answers, questionType questionType)
-    {
-        this.text = text;
-        this.answers = answers;
-        this.type = questionType;
-    }
-}
-
-class User
-{
-    public string name { get; set; }
-    public IPEndPoint IPPoint { get; set; }
-    public test test { get; set; }
-    public TcpClient tcpClient { get; set; }
-}
-
-class Message
-{
-    public string user { get; set; }
-    public string text { get; set; }
-    public MessageType type { get; set; }
-    public byte[] data { get; set; }
-    //public ConsoleColor color { get; set; }
-}
 class Server
 {
     static TcpListener listener;
@@ -117,16 +48,24 @@ class Server
     static int clients = 1;
     static readonly object lockObj = new object();
     static Random rand = new Random();
-    static List<test> testList = new List<test>();
-
-    static List<string> GetQuestName()
+    static Dictionary<string, SessionData> Sessions = new();
+    static List<Question> questions = new()
     {
-        List<string> list = new List<string>();
-        foreach (test test in testList)
+        new Question { Text = "Скільки буде 2 + 2?", Choices = ["3", "4", "5"], CorrectIndex = 1 },
+        new Question { Text = "Столиця Франції?", Choices = ["Берлін", "Париж", "Рим"], CorrectIndex = 1 },
+    };
+
+    static List<Question> ShuffleQuestions(List<Question> original)
+    {
+        var shuffled = original.OrderBy(q => rand.Next()).ToList();
+        foreach (var q in shuffled)
         {
-            list.Add(test.name);
+            var choices = q.Choices.Select((val, idx) => new { val, idx })
+                                   .OrderBy(_ => rand.Next()).ToList();
+            q.Choices = choices.Select(c => c.val).ToList();
+            q.CorrectIndex = choices.FindIndex(c => c.idx == q.CorrectIndex);
         }
-        return list;
+        return shuffled;
     }
     //static ConsoleColor Color;
 
@@ -190,7 +129,7 @@ class Server
         }
     }
 
-    static List<User> Clients = new List<User>();
+    /*static List<User> Clients = new List<User>();
     static void Broadcast(Message message)
     {
         Console.Write($"{message.user}: ");
@@ -208,77 +147,67 @@ class Server
                 Console.WriteLine(ex.Message);
             }
         }
-    }
-    static void Broadcast(string message)
-    {
-        Console.WriteLine($"Broadcast: {message}");
-        foreach (var item in Clients.ToArray())
-        {
-            sendMessage(item.tcpClient.GetStream(), message);
-        }
-    }
-    static void Broadcast(string message, TcpClient client)
-    {
-        Console.WriteLine($"Broadcast: {message}");
-        foreach (var item in Clients.ToArray())
-        {
-            if (!item.Equals(client))
-                sendMessage(item.tcpClient.GetStream(), message);
-        }
-    }
+    }*/
 
-    public int SendQuestion(NetworkStream stream)
-    {
-        SendPackage(stream, new Message { type = MessageType.QUESTION, data = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(testList)) });
-        return 0;
-    }
-
-    static int secToAnswer = 10;
-    static int readyPlayers;
-    static bool GameStarted = false;
-    static int number;
-    static TcpClient CurrentPlayer = new TcpClient();
-    
     static void HandleClient(object obj)
     {
         TcpClient client = (TcpClient)obj;
         Console.WriteLine();
         Console.WriteLine("New Client");
-        //ConsoleColor Color = colors[rand.Next(0, colors.Count())];
-        test ChoisenTest = new test("", null);
         var endPoint = client.Client.RemoteEndPoint.ToString();
         var stream = client.GetStream();
-        Message message = GetPackage(stream);
-        string name = "";
-        if (message.type == MessageType.NAME)
+        SendPackage(stream, new Message { Type = MessageType.Info, Text = "Вас вітає тестування. Починаємо!" });
+        int score = 0;
+        string clientId = client.Client.RemoteEndPoint.ToString();
+        SessionData session;
+        lock (lockObj)
         {
-            name = GetMessage(stream);
-            Console.WriteLine($"Name {name} | {endPoint.ToString()}");
-            Clients.Add(new User { name = name, tcpClient = client });
-            Broadcast(new Message { user = "SERVER", text = $"{name} connect to Server" });
+            if (!Sessions.ContainsKey(clientId))
+            {
+                session = new SessionData
+                {
+                    Questions = ShuffleQuestions(questions)
+                };
+                Sessions[clientId] = session;
+            }
+            else
+            {
+                session = Sessions[clientId];
+            }
         }
 
         try
         {
             while (true)
             {
-                SendPackage(stream, new Message { type = MessageType.SELECT, data = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(GetQuestName())) });
-                message = GetPackage(stream);
-                if (message.type == MessageType.CHOSEN)
+                var shuffledQuestions = ShuffleQuestions(questions);
+                foreach (var q in shuffledQuestions)
                 {
-                    int action = Convert.ToInt32(Encoding.UTF8.GetString(message.data).Split(char.MinValue).First());
+                    SendPackage(stream, new Message
+                    {
+                        Type = MessageType.Question,
+                        Data = q
+                    });
+
+                    Message? answerMsg = GetPackage(stream);
+                    if (answerMsg?.Type == MessageType.Answer && answerMsg.Data is JsonElement je && je.TryGetInt32(out int index))
+                    {
+                        if (index == q.CorrectIndex)
+                            score++;
+                    }
                 }
-                for (int i = 0; i < ChoisenTest.questions.Count; i++)
+
+                SendPackage(stream, new Message
                 {
-                    questions a = ChoisenTest.questions[Convert.ToInt32(ChoisenTest.getAnsweredQuestions())];
-                    ChoisenTest.
-                }
+                    Type = MessageType.Result,
+                    Text = $"Тест завершено. Ваш результат: {score}/{questions.Count}"
+                });
             }
 
         }
         catch (Exception ex)
         {
-            Broadcast($"{name} ({endPoint}) Disconected!", client);
+            Console.WriteLine(ex.Message);
         }
         finally
         {
