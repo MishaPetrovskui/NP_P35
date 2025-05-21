@@ -7,70 +7,30 @@ using System.Drawing;
 using System.Diagnostics;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 using static System.Net.Mime.MediaTypeNames;
-enum MessageType
+public enum MessageType
 {
-    SELECT,
-    NAME,
-    QUESTION,
-    QUESTIONanswer,
-    CHOSEN,
-    FINISH
+    Connect,
+    Question,
+    Answer,
+    Result,
+    Info,
+    End
 }
 
-enum questionType
+public class Message
 {
-    ANSWER,
-    OPEN
+    public MessageType Type { get; set; }
+    public string? Text { get; set; }
+    public object? Data { get; set; }
 }
 
-class test
+public class Question
 {
-    public string name { get; set; }
-    public List<questions> questions { get; set; }
-    public test(string name, List<questions> questions)
-    {
-        this.name = name;
-        this.questions = questions;
-    }
+    public string Text { get; set; } = "";
+    public List<string> Choices { get; set; } = new();
+    public int CorrectIndex { get; set; }
 }
 
-class questions
-{
-    public string text { get; set; }
-    public List<string> answers { get; set; }
-    public questionType type { set; get; }
-    string corect { get; set; }
-    public questions(string text, List<string> answers, string corect, questionType questionType)
-    {
-        this.text = text;
-        this.answers = answers;
-        this.corect = corect;
-        this.type = questionType;
-    }
-    public bool IsThisCorectAnswer(string answer)
-    {
-        if (answer.ToLower().Equals(corect.ToLower()))
-            return true;
-        return false;
-    }
-}
-
-class User
-{
-    public string name { get; set; }
-    public IPEndPoint IPPoint { get; set; }
-    public test test { get; set; }
-    public TcpClient tcpClient { get; set; }
-}
-
-class Message
-{
-    public string user { get; set; }
-    public string text { get; set; }
-    public MessageType type { get; set; }
-    public byte[] data { get; set; }
-    //public ConsoleColor color { get; set; }
-}
 class Client
 {
     static string serverIP = "127.0.0.1";
@@ -112,21 +72,6 @@ class Client
             Encoding.UTF8.GetString(buffer).Split(char.MinValue).First());
     }
 
-    static void ReadingFromServer()
-    {
-        while (true)
-        {
-            try
-            {
-                Message? clientMessage =
-                    JsonSerializer.Deserialize<Message>(GetMessage());
-                /*Console.ForegroundColor = clientMessage.color;*/
-                Console.WriteLine($"{clientMessage.user}: {clientMessage.text}");
-                Console.ResetColor();
-            }
-            catch (Exception ex) { break; }
-        }
-    }
 
     public static uint Menu(IEnumerable<string> Action)
     {
@@ -159,13 +104,39 @@ class Client
         }
     }
 
+    static int ShowMenuWithTimer(string question, List<string> options, int seconds)
+    {
+        int index = 0;
+        var start = DateTime.Now;
+        while ((DateTime.Now - start).TotalSeconds < seconds)
+        {
+            Console.Clear();
+            Console.WriteLine($"{question} (Залишилось: {seconds - (int)(DateTime.Now - start).TotalSeconds} сек)");
+            Console.WriteLine();
+            for (int i = 0; i < options.Count; i++)
+            {
+                Console.WriteLine((i == index ? "> " : "  ") + options[i]);
+            }
+
+            if (Console.KeyAvailable)
+            {
+                var key = Console.ReadKey(true).Key;
+                if (key == ConsoleKey.UpArrow) index = (index - 1 + options.Count) % options.Count;
+                else if (key == ConsoleKey.DownArrow) index = (index + 1) % options.Count;
+                else if (key == ConsoleKey.Enter) return index;
+            }
+
+            Thread.Sleep(100);
+        }
+
+        return -1;
+    }
+
+
     static void Main(string[] args)
     {
         Console.OutputEncoding = UTF8Encoding.UTF8;
         Console.InputEncoding = UTF8Encoding.UTF8;
-
-        Console.Write("Type your name: ");
-        string name = Console.ReadLine();
 
 
         TcpClient tcpClient = new TcpClient(serverIP, port);
@@ -173,21 +144,34 @@ class Client
 
         stream = tcpClient.GetStream();
 
-        SendPackage(stream, new Message { type = MessageType.NAME, data = Encoding.UTF8.GetBytes(name) });
-
         while (true)
         {
-            int action = 0;
-            Message message = GetPackage(stream);
-            if (message.type == MessageType.SELECT)
-            {
-                action = (int)Menu(JsonSerializer.Deserialize<List<string>>(Encoding.UTF8.GetString(message.data)));
+            Message? msg = GetPackage(stream);
+            if (msg == null) break;
 
-                SendPackage(stream, new Message { type = MessageType.CHOSEN, data = Encoding.UTF8.GetBytes($"{action}") });
+            switch (msg.Type)
+            {
+                case MessageType.Info:
+                    Console.WriteLine(msg.Text);
+                    break;
+
+                case MessageType.Question:
+                    var q = JsonSerializer.Deserialize<Question>(msg.Data?.ToString() ?? "");
+                    if (q != null)
+                    {
+                        int selected = ShowMenuWithTimer(q.Text, q.Choices, 20);
+                        SendPackage(stream, new Message
+                        {
+                            Type = MessageType.Answer,
+                            Data = selected
+                        });
+                    }
+                    break;
+
+                case MessageType.Result:
+                    Console.WriteLine(msg.Text);
+                    return;
             }
         }
-
-        Console.WriteLine("Type Enter to exit");
-        Console.ReadLine();
     }
 }
