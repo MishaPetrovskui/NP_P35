@@ -36,7 +36,6 @@ class Client
     static string serverIP = "127.0.0.1";
     static int port = 5000;
     static NetworkStream? stream = null;
-    static ConsoleColor Color;
     static void sendMessage(string message, int buffsize = 1024)
     {
         if (stream == null)
@@ -72,8 +71,7 @@ class Client
             Encoding.UTF8.GetString(buffer).Split(char.MinValue).First());
     }
 
-    static DateTime start = DateTime.Now;
-    static int ShowMenuWithTimer(string question, List<string> options, int seconds)
+    static int ShowMenuWithTimer(string question, List<string> options, int seconds, DateTime start)
     {
         int index = 0;
         while ((DateTime.Now - start).TotalSeconds < seconds)
@@ -102,6 +100,25 @@ class Client
         return -1;
     }
 
+    static int ShowMenu(string question, List<string> options)
+    {
+        int index = 0;
+        while (true)
+        {
+            Console.Clear();
+            Console.WriteLine(question);
+            Console.WriteLine();
+            for (int i = 0; i < options.Count; i++)
+            {
+                Console.WriteLine((i == index ? "> " : "  ") + options[i]);
+            }
+
+            var key = Console.ReadKey(true).Key;
+            if (key == ConsoleKey.UpArrow) index = (index - 1 + options.Count) % options.Count;
+            else if (key == ConsoleKey.DownArrow) index = (index + 1) % options.Count;
+            else if (key == ConsoleKey.Enter) return index;
+        }
+    }
 
     static void Main(string[] args)
     {
@@ -111,11 +128,9 @@ class Client
         Console.Title = "CLIENT";
         TcpClient tcpClient = new TcpClient(serverIP, port);
         Console.WriteLine("Succes!");
-
+        Dictionary<string, string> previousResults = new();
         stream = tcpClient.GetStream();
-
-
-
+        DateTime start = DateTime.Now;
         while (true)
         {
             Message? msg = GetPackage(stream);
@@ -129,23 +144,54 @@ class Client
                     Console.Clear();
                     break;
 
-                case MessageType.Question:
-                    var q = JsonSerializer.Deserialize<Question>(msg.Data?.ToString());
-                    if (q != null)
+                case MessageType.Question when msg.Text == "Оберіть тест":
+                    var testList = JsonSerializer.Deserialize<List<string>>(msg.Data?.ToString() ?? "[]");
+                    int testIndex = ShowMenu(msg.Text, testList ?? new List<string>());
+                    SendPackage(stream, new Message
                     {
-                        int selected = ShowMenuWithTimer(q.Text, q.Choices, 60);
-                        SendPackage(stream, new Message
+                        Type = MessageType.Answer,
+                        Data = testIndex
+                    });
+                    start = DateTime.Now;
+                    break;
+
+                case MessageType.Question:
+                    try
+                    {
+                        var json = JsonSerializer.Serialize(msg.Data);
+                        var question = JsonSerializer.Deserialize<Question>(json);
+                        if (question != null)
                         {
-                            Type = MessageType.Answer,
-                            Data = selected
-                        });
+                            int answerIndex = ShowMenuWithTimer(question.Text, question.Choices,60, start);
+                            SendPackage(stream, new Message
+                            {
+                                Type = MessageType.Answer,
+                                Data = answerIndex
+                            });
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("Помилка обробки питання: " + ex.Message);
                     }
                     break;
 
                 case MessageType.Result:
+                    Console.Clear();
                     Console.WriteLine(msg.Text);
+                    Console.WriteLine("\nНатисніть Enter, щоб повернутись до меню тестів...");
+                    Console.ReadLine();
+                    Console.Clear();
+                    break;
+
+                case MessageType.End:
+                    Console.Clear();
+                    Console.WriteLine(msg.Text);
+                    Console.WriteLine("Натисніть Enter, щоб завершити...");
+                    Console.ReadLine();
                     return;
             }
         }
+        tcpClient.Close();
     }
 }
