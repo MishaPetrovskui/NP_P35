@@ -64,19 +64,18 @@ class Server
         new Test
         {
             Name = "Test1",
-            Questions = new List<Question> 
+            Questions = new List<Question>
             {
                 new Question { Text = "Скільки буде 2 + 2?", Choices = new List<string> { "3", "4", "5" }, CorrectIndex = 1 },
                 new Question { Text = "Столиця Франції?", Choices = new List<string> { "Берлін", "Париж", "Рим" }, CorrectIndex = 1 },
                 new Question { Text = "Країна Німеччини?", Choices = new List<string> { "Берлін", "Париж", "Рим" }, CorrectIndex = 0 },
-                new Question { Text = "Скільки буде 8 + 2?", Choices = new List<string> { "6", "10", "82" }, CorrectIndex = 2 },
+                new Question { Text = "Скільки буде 8 + 2?(js)", Choices = new List<string> { "6", "10", "82" }, CorrectIndex = 2 },
                 new Question { Text = "Какой химический элемент имеет символ\"O\"?", Choices = new List<string> { "Озон", "Оксид", "Оксиген", "Кислород" }, CorrectIndex = 3 },
                 new Question { Text = "Какая страна является родиной пиццы?", Choices = new List<string> { "Франция", "Испания", "Италия", "Греция" }, CorrectIndex = 2 },
                 new Question { Text = "Сколько континентов на Земле?", Choices = new List<string> { "5", "6", "7", "8" }, CorrectIndex = 2 },
-                new Question { Text = "Скільки буде 8 + 2?", Choices = new List<string> { "6", "10", "82" }, CorrectIndex = 2 },
                 new Question { Text = "Скільки буде 8 + 2?", Choices = new List<string> { "6", "10", "82" }, CorrectIndex = 2 }
             }
-        }, 
+        },
         new Test
         {
             Name = "Test2",
@@ -85,11 +84,10 @@ class Server
                 new Question { Text = "Скільки буде 2 + 2?", Choices = new List<string> { "3", "4", "5" }, CorrectIndex = 1 },
                 new Question { Text = "Столиця Франції?", Choices = new List<string> { "Берлін", "Париж", "Рим" }, CorrectIndex = 1 },
                 new Question { Text = "Країна Німеччини?", Choices = new List<string> { "Берлін", "Париж", "Рим" }, CorrectIndex = 0 },
-                new Question { Text = "Скільки буде 8 + 2?", Choices = new List<string> { "6", "10", "82" }, CorrectIndex = 2 },
+                new Question { Text = "Скільки буде 8 + 2?(js)", Choices = new List<string> { "6", "10", "82" }, CorrectIndex = 2 },
                 new Question { Text = "Какой химический элемент имеет символ\"O\"?", Choices = new List<string> { "Озон", "Оксид", "Оксиген", "Кислород" }, CorrectIndex = 3 },
                 new Question { Text = "Какая страна является родиной пиццы?", Choices = new List<string> { "Франция", "Испания", "Италия", "Греция" }, CorrectIndex = 2 },
                 new Question { Text = "Сколько континентов на Земле?", Choices = new List<string> { "5", "6", "7", "8" }, CorrectIndex = 2 },
-                new Question { Text = "Скільки буде 8 + 2?", Choices = new List<string> { "6", "10", "82" }, CorrectIndex = 2 },
                 new Question { Text = "Скільки буде 8 + 2?", Choices = new List<string> { "6", "10", "82" }, CorrectIndex = 2 }
             }
         }
@@ -106,12 +104,6 @@ class Server
         }
         return shuffled;
     }
-    //static ConsoleColor Color;
-
-    static List<ConsoleColor> colors = new List<ConsoleColor>
-        {
-            ConsoleColor.Green, ConsoleColor.Red, ConsoleColor.DarkGreen, ConsoleColor.Magenta, ConsoleColor.Blue, ConsoleColor.Cyan, ConsoleColor.Magenta, ConsoleColor.Yellow,
-        };
 
     static void sendMessage(NetworkStream stream, string message, int buffsize = 1024)
     {
@@ -159,10 +151,10 @@ class Server
 
         Console.WriteLine("Server Started!");
 
-        /*string JsonString = JsonSerializer.Serialize(questions);
+        /*string JsonString = JsonSerializer.Serialize(tests);
         File.WriteAllText(FileName, JsonString);*/
 
-        questions = JsonSerializer.Deserialize<List<Question>>(File.ReadAllText(FileName));
+        tests = JsonSerializer.Deserialize<List<Test>>(File.ReadAllText(FileName));
 
         while (true)
         {
@@ -171,26 +163,6 @@ class Server
             thread.Start(client);
         }
     }
-
-    /*static List<User> Clients = new List<User>();
-    static void Broadcast(Message message)
-    {
-        Console.Write($"{message.user}: ");
-        //Console.ForegroundColor = message.color;
-        Console.WriteLine(message.text);
-        //Console.ResetColor();
-        foreach (var item in Clients.ToArray())
-        {
-            try
-            {
-                sendMessage(item.tcpClient.GetStream(), JsonSerializer.Serialize(message));
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
-        }
-    }*/
 
     static void HandleClient(object obj)
     {
@@ -201,35 +173,55 @@ class Server
         var endPoint = client.Client.RemoteEndPoint.ToString();
         var stream = client.GetStream();
         SendPackage(stream, new Message { Type = MessageType.Info, Text = "Вас вітає тестування. Починаємо!" });
-        int score = 0;
+        
         try
         {
             while (true)
             {
-                var shuffledQuestions = ShuffleQuestions(questions);
-                foreach (var q in shuffledQuestions)
-                {
-                    SendPackage(stream, new Message
-                    {
-                        Type = MessageType.Question,
-                        Data = q
-                    });
-
-                    Message? answerMsg = GetPackage(stream);
-                    if (answerMsg?.Type == MessageType.Answer && answerMsg.Data is JsonElement je && je.TryGetInt32(out int index))
-                    {
-                        if (index == q.CorrectIndex)
-                            score++;
-                    }
-                }
-
+                int score = 0;
                 SendPackage(stream, new Message
                 {
-                    Type = MessageType.Result,
-                    Text = $"Тест завершено. Ваш результат: {score}/{questions.Count}"
+                    Type = MessageType.Question,
+                    Text = "Оберіть тест",
+                    Data = tests.Select(t => t.Name).ToList()
                 });
-            }
 
+                Message? selectedTestMsg = GetPackage(stream);
+                if (selectedTestMsg?.Data is JsonElement je && je.ValueKind == JsonValueKind.Number && je.TryGetInt32(out int testIndex))
+                {
+                    if (testIndex < 0 || testIndex >= tests.Count)
+                    {
+                        SendPackage(stream, new Message { Type = MessageType.End, Text = "Некоректний вибір тесту." });
+                        client.Close();
+                        return;
+                    }
+
+                    var selectedTest = tests[testIndex];
+                    var shuffledQuestions = ShuffleQuestions(selectedTest.Questions);
+
+                    foreach (var q in shuffledQuestions)
+                    {
+                        SendPackage(stream, new Message
+                        {
+                            Type = MessageType.Question,
+                            Data = q
+                        });
+
+                        Message? answerMsg = GetPackage(stream);
+                        if (answerMsg?.Type == MessageType.Answer && answerMsg.Data is JsonElement jeAns && jeAns.TryGetInt32(out int index))
+                        {
+                            if (index == q.CorrectIndex)
+                                score++;
+                        }
+                    }
+
+                    SendPackage(stream, new Message
+                    {
+                        Type = MessageType.Result,
+                        Text = $"Тест завершено. Ваш результат: {score}/{shuffledQuestions.Count}"
+                    });
+                }
+            }
         }
         catch (Exception ex)
         {
